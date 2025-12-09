@@ -13,9 +13,7 @@ public class SchedulerGUI extends JFrame {
     private JPanel mainPanel;
     private CardLayout mainLayout;
 
-    private JTextField userField;
-    private JPasswordField passField;
-    private JLabel loginMessage;
+    
 
     private JTabbedPane tabbedPane;
 
@@ -50,62 +48,31 @@ public class SchedulerGUI extends JFrame {
     }
 
     private void initializeGUI() {
-        mainLayout = new CardLayout();
-        mainPanel = new JPanel(mainLayout);
-        add(mainPanel);
+    mainLayout = new CardLayout();
+    mainPanel = new JPanel(mainLayout);
+    add(mainPanel);
 
-        buildLoginPanel();
-        buildAppPanel();
+    // Only build the app UI, no login panel
+    buildAppPanel();
 
-        mainLayout.show(mainPanel, "LOGIN");
+    // Show the app immediately
+    mainLayout.show(mainPanel, "APP");
 
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(600, 450);
-    }
+    // Load dropdown lists
+    refreshPatientCombo();
+    refreshDoctorCombos();
+
+    setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    setSize(600, 450);
+}
+
+
 
     private void buildLoginPanel() {
-        JPanel loginPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.insets = new Insets(5, 5, 5, 5);
 
-        gc.gridx = 0; gc.gridy = 0;
-        loginPanel.add(new JLabel("Username:"), gc);
-        gc.gridx = 1;
-        userField = new JTextField(15);
-        loginPanel.add(userField, gc);
-
-        gc.gridx = 0; gc.gridy = 1;
-        loginPanel.add(new JLabel("Password:"), gc);
-        gc.gridx = 1;
-        passField = new JPasswordField(15);
-        loginPanel.add(passField, gc);
-
-        gc.gridx = 0; gc.gridy = 2; gc.gridwidth = 2;
-        loginMessage = new JLabel(" ");
-        loginMessage.setForeground(Color.RED);
-        loginPanel.add(loginMessage, gc);
-
-        gc.gridy = 3;
-        JButton loginButton = new JButton("Login");
-        loginPanel.add(loginButton, gc);
-
-        loginButton.addActionListener(e -> {
-            String user = userField.getText().trim();
-            String pass = new String(passField.getPassword());
-            if (manager.login(user, pass)) {
-                loginMessage.setText(" ");
-                userField.setText("");
-                passField.setText("");
-                refreshPatientCombo();
-                refreshDoctorCombos();
-                mainLayout.show(mainPanel, "APP");
-            } else {
-                loginMessage.setText("Invalid username or password.");
-            }
-        });
-
-        mainPanel.add(loginPanel, "LOGIN");
+        
     }
+
 
     private void buildAppPanel() {
         JPanel appPanel = new JPanel(new BorderLayout());
