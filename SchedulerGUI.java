@@ -29,7 +29,10 @@ public class SchedulerGUI extends JFrame {
 
     private JTextField dateField;
     private JButton dateButton;
-    private JTextField timeField;
+
+    private DefaultComboBoxModel<LocalTime> timeComboModel;
+    private JComboBox<LocalTime> timeCombo;
+
     private JButton scheduleButton;
 
     // View/Cancel tab
@@ -41,6 +44,11 @@ public class SchedulerGUI extends JFrame {
     private JList<String> apptList;
     private JButton viewButton;
     private JButton cancelButton;
+
+    // who is logged in
+    private String currentStaff;
+    private JLabel staffStatusLabel;
+
 
     public SchedulerGUI(AppointmentManager manager) {
         this.manager = manager;
@@ -135,6 +143,7 @@ public class SchedulerGUI extends JFrame {
         doctorComboModel = new DefaultComboBoxModel<>();
         doctorCombo = new JComboBox<>(doctorComboModel);
         panel.add(doctorCombo, gc);
+        doctorCombo.addActionListener(e -> refreshTimeSlots());
 
         // Date picker
         row++;
@@ -148,15 +157,21 @@ public class SchedulerGUI extends JFrame {
         dateButton = new JButton("Select Date");
         panel.add(dateButton, gc);
 
-        dateButton.addActionListener(e -> openDatePicker(dateField));
+        dateButton.addActionListener(e -> {
+            openDatePicker(dateField);
+            refreshTimeSlots();   // update slots after picking date
+        });
 
-        // Time field
+        // Time slots combo
         row++;
         gc.gridx = 0; gc.gridy = row;
-        panel.add(new JLabel("Time (HH:MM):"), gc);
+        panel.add(new JLabel("Time slot:"), gc);
         gc.gridx = 1;
-        timeField = new JTextField(6);
-        panel.add(timeField, gc);
+        timeComboModel = new DefaultComboBoxModel<>();
+        timeCombo = new JComboBox<>(timeComboModel);
+        timeCombo.setPrototypeDisplayValue(LocalTime.of(9, 0)); // for width
+        panel.add(timeCombo, gc);
+
 
         // Schedule button
         row++;
@@ -255,6 +270,34 @@ public class SchedulerGUI extends JFrame {
         }
     }
 
+    private void refreshTimeSlots() {
+        timeComboModel.removeAllElements();
+
+        Doctor doctor = (Doctor) doctorCombo.getSelectedItem();
+        String dateStr = dateField.getText().trim();
+
+        if (doctor == null || dateStr.isEmpty()) {
+            return; // nothing to populate yet
+        }
+
+        LocalDate date;
+        try {
+            date = LocalDate.parse(dateStr);
+        } catch (DateTimeParseException ex) {
+            return; // invalid date in field; keep combo empty
+        }
+
+        List<LocalTime> slots = manager.getAvailableTimeSlots(doctor.getId(), date);
+        for (LocalTime t : slots) {
+            timeComboModel.addElement(t);
+        }
+
+        if (timeComboModel.getSize() > 0) {
+            timeCombo.setSelectedIndex(0);
+        }
+    }
+
+
     private void openDatePicker(JTextField targetField) {
         LocalDate base = LocalDate.now();
         String txt = targetField.getText().trim();
@@ -295,32 +338,22 @@ public class SchedulerGUI extends JFrame {
         Patient patient = (Patient) patientCombo.getSelectedItem();
         Doctor doctor = (Doctor) doctorCombo.getSelectedItem();
         String dateStr = dateField.getText().trim();
-        String timeStr = timeField.getText().trim();
+        LocalTime time = (LocalTime) timeCombo.getSelectedItem();
 
-        if (patient == null || doctor == null || dateStr.isEmpty() || timeStr.isEmpty()) {
+        if (patient == null || doctor == null || dateStr.isEmpty() || time == null) {
             JOptionPane.showMessageDialog(this,
-                    "Select patient, doctor, date, and time first.",
+                    "Select patient, doctor, date, and time slot first.",
                     "Missing data", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
         LocalDate date;
-        LocalTime time;
         try {
             date = LocalDate.parse(dateStr);
         } catch (DateTimeParseException ex) {
             JOptionPane.showMessageDialog(this,
                     "Invalid date. Use the Select Date button.",
                     "Invalid date", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        try {
-            time = LocalTime.parse(timeStr);
-        } catch (DateTimeParseException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Invalid time format, use HH:MM.",
-                    "Invalid time", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -346,7 +379,7 @@ public class SchedulerGUI extends JFrame {
                     "Appointment scheduled.",
                     "Success", JOptionPane.INFORMATION_MESSAGE);
             dateField.setText("");
-            timeField.setText("");
+            timeComboModel.removeAllElements();
         }
     }
 
@@ -354,24 +387,32 @@ public class SchedulerGUI extends JFrame {
         Doctor doctor = (Doctor) doctorCombo2.getSelectedItem();
         String dateStr = dateField2.getText().trim();
 
-        if (doctor == null || dateStr.isEmpty()) {
+        if (doctor == null) {
             JOptionPane.showMessageDialog(this,
-                    "Select doctor and date first.",
+                    "Select a doctor first.",
                     "Missing data", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        LocalDate date;
-        try {
-            date = LocalDate.parse(dateStr);
-        } catch (DateTimeParseException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Invalid date. Use the Select Date button.",
-                    "Invalid date", JOptionPane.ERROR_MESSAGE);
-            return;
+        List<Appointment> list;
+
+        if (dateStr.isEmpty()) {
+            // No date chosen → show all appointments for this doctor
+            list = manager.getAppointmentsForDoctor(doctor.getId());
+        } else {
+            // Date chosen → filter to that day
+            LocalDate date;
+            try {
+                date = LocalDate.parse(dateStr);
+            } catch (DateTimeParseException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Invalid date. Use the Select Date button.",
+                        "Invalid date", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            list = manager.getAppointmentsFor(doctor.getId(), date);
         }
 
-        List<Appointment> list = manager.getAppointmentsFor(doctor.getId(), date);
         apptListModel.clear();
 
         if (list.isEmpty()) {
@@ -382,8 +423,9 @@ public class SchedulerGUI extends JFrame {
             for (Appointment appt : list) {
                 Patient p = manager.getPatient(appt.getPatientId());
                 String patientName = (p != null ? p.getName() : appt.getPatientId());
-                String line = appt.getTime().toString()
-                        + " - " + patientName + " (" + appt.getPatientId() + ")";
+                String line = appt.getDate().toString() + " " +
+                        appt.getTime().toString() + " - " +
+                        patientName + " (" + appt.getPatientId() + ")";
                 apptListModel.addElement(line);
             }
             apptList.putClientProperty("apptListData", list);
