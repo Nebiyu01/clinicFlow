@@ -138,6 +138,22 @@ public class AppointmentManager {
         return result;
     }
 
+    // All appointments for a doctor, across all dates
+    public List<Appointment> getAppointmentsForDoctor(String doctorId) {
+        List<Appointment> result = new ArrayList<>();
+        for (Appointment appt : appointments) {
+            if (appt.getDoctorId().equals(doctorId)) {
+                result.add(appt);
+            }
+        }
+        // sort by date, then time
+        result.sort(
+                Comparator.comparing(Appointment::getDate)
+                        .thenComparing(Appointment::getTime)
+        );
+        return result;
+    }
+
     public boolean cancelAppointment(int appointmentId) {
         Iterator<Appointment> it = appointments.iterator();
         boolean removed = false;
@@ -154,6 +170,56 @@ public class AppointmentManager {
         }
         return removed;
     }
+    // ---------- Time slots helper ----------
+
+    /**
+     * Returns all available time slots for a given doctor and date.
+     * Slots are 30 minutes long, with a 5-minute gap between slots.
+     * Range: from 09:00 to 18:00 (last slot is ended by 18:00).
+     * Already-booked slots and (if date is today) past slots are removed.
+     */
+    public List<LocalTime> getAvailableTimeSlots(String doctorId, LocalDate date) {
+        List<LocalTime> result = new ArrayList<>();
+
+        // All booked times for this doctor on that date
+        Set<LocalTime> booked = new HashSet<>();
+        for (Appointment appt : appointments) {
+            if (appt.getDoctorId().equals(doctorId)
+                    && appt.getDate().equals(date)) {
+                booked.add(appt.getTime());
+            }
+        }
+
+        LocalTime startOfDay = LocalTime.of(9, 0);
+        LocalTime endOfDay = LocalTime.of(18, 0);
+
+        LocalDateTime now = LocalDateTime.now();
+        boolean isToday = date.equals(now.toLocalDate());
+
+        LocalTime t = startOfDay;
+        // slot is [t, t+30); must finish by 18:00
+        while (!t.plusMinutes(30).isAfter(endOfDay)) {
+            boolean free = !booked.contains(t);
+
+            boolean notPast = true;
+            if (isToday) {
+                LocalDateTime slotStart = LocalDateTime.of(date, t);
+                if (slotStart.isBefore(now)) {
+                    notPast = false;
+                }
+            }
+
+            if (free && notPast) {
+                result.add(t);
+            }
+
+            // 30-minute appointment + 5-minute gap = 35 minutes step
+            t = t.plusMinutes(35);
+        }
+
+        return result;
+    }
+
 
     // ---------- Load / save staff ----------
 
