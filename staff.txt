@@ -1,1 +1,2 @@
 admin;password
+peter;12345678
