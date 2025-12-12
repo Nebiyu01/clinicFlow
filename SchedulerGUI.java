@@ -45,9 +45,9 @@ public class SchedulerGUI extends JFrame {
     private JButton viewButton;
     private JButton cancelButton;
 
-    // who is logged in
-    private String currentStaff;
-    private JLabel staffStatusLabel;
+    private JTextField userField;
+    private JPasswordField passField;
+    private JLabel loginMessage;
 
 
     public SchedulerGUI(AppointmentManager manager) {
@@ -58,13 +58,18 @@ public class SchedulerGUI extends JFrame {
     private void initializeGUI() {
     mainLayout = new CardLayout();
     mainPanel = new JPanel(mainLayout);
-    add(mainPanel);
+    setContentPane(mainPanel);
 
-    // Only build the app UI, no login panel
-    buildAppPanel();
+        // Build both screens
+        buildLoginPanel();
+        buildAppPanel();
 
-    // Show the app immediately
-    mainLayout.show(mainPanel, "APP");
+        // Start on the login screen
+        mainLayout.show(mainPanel, "LOGIN");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(600, 450);
+        setLocationRelativeTo(null);
+
 
     // Load dropdown lists
     refreshPatientCombo();
@@ -77,7 +82,57 @@ public class SchedulerGUI extends JFrame {
 
 
     private void buildLoginPanel() {
+        JPanel loginPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.insets = new Insets(5, 5, 5, 5);
 
+        // Username
+        gc.gridx = 0; gc.gridy = 0;
+        loginPanel.add(new JLabel("Username:"), gc);
+        gc.gridx = 1;
+        userField = new JTextField(15);
+        loginPanel.add(userField, gc);
+
+        // Password
+        gc.gridx = 0; gc.gridy = 1;
+        loginPanel.add(new JLabel("Password:"), gc);
+        gc.gridx = 1;
+        passField = new JPasswordField(15);
+        loginPanel.add(passField, gc);
+
+        // Message label (for errors)
+        gc.gridx = 0; gc.gridy = 2; gc.gridwidth = 2;
+        loginMessage = new JLabel(" ");
+        loginMessage.setForeground(Color.RED);
+        loginPanel.add(loginMessage, gc);
+
+        // Login button
+        gc.gridy = 3;
+        JButton loginButton = new JButton("Login");
+        loginPanel.add(loginButton, gc);
+
+        // Button behaviour
+        loginButton.addActionListener(e -> {
+            String user = userField.getText().trim();
+            String pass = new String(passField.getPassword());
+            if (manager.login(user, pass)) {
+                // success
+                loginMessage.setText(" ");
+                userField.setText("");
+                passField.setText("");
+                // make sure dropdowns are fresh
+                refreshPatientCombo();
+                refreshDoctorCombos();
+                // switch from LOGIN screen to main app
+                mainLayout.show(mainPanel, "APP");
+            } else {
+                // failure
+                loginMessage.setText("Invalid username or password.");
+            }
+        });
+
+        // Add this card to the mainPanel
+        mainPanel.add(loginPanel, "LOGIN");
         
     }
 
@@ -423,9 +478,13 @@ public class SchedulerGUI extends JFrame {
             for (Appointment appt : list) {
                 Patient p = manager.getPatient(appt.getPatientId());
                 String patientName = (p != null ? p.getName() : appt.getPatientId());
+                String phone = (p != null ? formatPhone(p.getContact()) : "N/A");
+
                 String line = appt.getDate().toString() + " " +
                         appt.getTime().toString() + " - " +
-                        patientName + " (" + appt.getPatientId() + ")";
+                        patientName + " (" + appt.getPatientId() + ")" +
+                        "  Phone: " + phone;
+
                 apptListModel.addElement(line);
             }
             apptList.putClientProperty("apptListData", list);
@@ -461,4 +520,31 @@ public class SchedulerGUI extends JFrame {
             }
         }
     }
+    // ---------- Phone formatting helper ----------
+    private String formatPhone(String raw) {
+        if (raw == null) {
+            return "N/A";
+        }
+
+        String digits = raw.replaceAll("\\D", ""); // keep only 0-9
+
+        if (digits.length() == 10) {
+            // 10-digit US number
+            String area = digits.substring(0, 3);
+            String prefix = digits.substring(3, 6);
+            String line = digits.substring(6);
+            return "(" + area + ") " + prefix + "-" + line;
+        } else if (digits.length() == 11 && digits.charAt(0) == '1') {
+            // 1 + 10 digits (US country code)
+            String area = digits.substring(1, 4);
+            String prefix = digits.substring(4, 7);
+            String line = digits.substring(7);
+            return "+1 (" + area + ") " + prefix + "-" + line;
+        }
+
+        // Fallback: if empty after trimming, show N/A; otherwise return original
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? "N/A" : trimmed;
+    }
+
 }
